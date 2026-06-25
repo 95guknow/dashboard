@@ -69,27 +69,13 @@ async def post_event(payload: EventIn):
 async def index():
     return FileResponse(BASE / "templates" / "index.html")
 
-@app.get("/api/events")
-async def get_events(limit: int = 100):
-    return {"events": list(events)[-limit:]}
+@app.get("/heroic", response_class=HTMLResponse)
+async def heroic():
+    return FileResponse(BASE / "templates" / "heroic.html")
 
-@app.delete("/api/events")
-async def clear_events():
-    events.clear()
-    emit({"type": "system", "msg": "Event-Log geleert"})
-    return {"status": "cleared"}
-
-@app.get("/api/stats")
-async def get_stats():
-    if not events:
-        return {"total": 0, "by_type": {}, "rate_per_min": 0}
-    by_type: dict[str, int] = {}
-    for e in events:
-        t = e.get("type", "unknown")
-        by_type[t] = by_type.get(t, 0) + 1
-    cutoff = time.time() - 60
-    recent = sum(1 for e in events if e["ts"] > cutoff)
-    return {"total": len(events), "by_type": by_type, "rate_per_min": recent}
+@app.get("/about", response_class=HTMLResponse)
+async def about():
+    return FileResponse(BASE / "templates" / "about.html")
 
 @app.get("/api/wallet")
 async def get_wallet():
