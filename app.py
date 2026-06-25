@@ -13,13 +13,20 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import Request
+from pydantic import BaseModel
 
+BASE = Path(__file__).parent
 app = FastAPI(title="Denkprozess Monitor")
 
 # In-Memory Event Stream
 MAX_EVENTS = 500
 events: deque[dict] = deque(maxlen=MAX_EVENTS)
 subscribers: list[WebSocket] = []
+
+class EventIn(BaseModel):
+    type: str = "info"
+    msg: str = ""
+    count: int | None = None
 
 def emit(event: dict):
     event["ts"] = time.time()
@@ -33,6 +40,11 @@ def emit(event: dict):
             dead.append(ws)
     for ws in dead:
         subscribers.remove(ws)
+
+@app.post("/api/events")
+async def post_event(payload: EventIn):
+    emit({"type": payload.type, "msg": payload.msg, **({"count": payload.count} if payload.count is not None else {})})
+    return {"status": "queued", "id": events[-1]["id"]}
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
