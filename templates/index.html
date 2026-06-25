@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Denkprozess Monitor</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        bg: '#0a0a0f',
+        surface: '#12121a',
+        border: '#1e1e2e',
+        accent: '#00d4aa',
+        accent2: '#7c3aed',
+        warn: '#fbbf24',
+        error: '#ef4444',
+        text: '#e2e8f0',
+        muted: '#94a3b8'
+      },
+      fontFamily: {
+        mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+        sans: ['Inter', 'system-ui', 'sans-serif']
+      }
+    }
+  }
+}
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+  
+  * { box-sizing: border-box; }
+  body { 
+    background: #0a0a0f; 
+    background-image: 
+      radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 80%, rgba(0, 212, 170, 0.06) 0%, transparent 50%);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #e2e8f0;
+  }
+  
+  .glass-panel {
+    background: rgba(18, 18, 26, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 16px;
+  }
+  
+  .event-row {
+    animation: slideIn 0.3s ease-out;
+    border-left: 3px solid transparent;
+  }
+  .event-row:hover { background: rgba(255,255,255,0.02); }
+  
+  .type-token { border-color: #00d4aa; }
+  .type-step { border-color: #7c3aed; }
+  .type-system { border-color: #fbbf24; }
+  .type-error { border-color: #ef4444; }
+  .type-tool { border-color: #3b82f6; }
+  
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(-12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(0, 212, 170, 0.4); }
+    50% { box-shadow: 0 0 20px 4px rgba(0, 212, 170, 0.15); }
+  }
+  
+  .live-indicator {
+    animation: pulse-glow 2s infinite;
+  }
+  
+  .timing-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #00d4aa, #7c3aed);
+    transition: width 0.4s ease;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { 
+    background: rgba(255,255,255,0.1); 
+    border-radius: 3px; 
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+</style>
+</head>
+<body class="min-h-screen p-4 md:p-6">
+
+<div class="max-w-7xl mx-auto space-y-5">
+  <!-- Header -->
+  <header class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">
+        <span class="text-accent">Denkprozess</span> Monitor
+      </h1>
+      <p class="text-muted text-sm mt-0.5">Echtzeit-Visualisierung des KI-Denkflusses</p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span id="statusBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium bg-surface border border-border">
+        <span class="w-2 h-2 rounded-full bg-muted"></span>
+        <span class="text-muted">Verbinde...</span>
+      </span>
+      <button onclick="clearLogs()" class="px-3 py-1.5 rounded-lg text-xs font-medium bg-surface border border-border hover:border-accent/40 transition-colors">
+        Leeren
+      </button>
+    </div>
+  </header>
+
+  <!-- Stats Grid -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="glass-panel p-4">
+      <div class="text-muted text-xs font-medium uppercase tracking-wider">Events</div>
+      <div id="statTotal" class="text-2xl font-bold mt-1 font-mono">0</div>
+    </div>
+    <div class="glass-panel p-4">
+      <div class="text-muted text-xs font-medium uppercase tracking-wider">Rate</div>
+      <div id="statRate" class="text-2xl font-bold mt-1 font-mono text-accent">0<span class="text-sm text-muted">/min</span></div>
+    </div>
+    <div class="glass-panel p-4">
+      <div class="text-muted text-xs font-medium uppercase tracking-wider">Tool Calls</div>
+      <div id="statTools" class="text-2xl font-bold mt-1 font-mono text-accent2">0</div>
+    </div>
+    <div class="glass-panel p-4">
+      <div class="text-muted text-xs font-medium uppercase tracking-wider">Avg Time</div>
+      <div id="statAvg" class="text-2xl font-bold mt-1 font-mono"><span class="text-warn">0</span><span class="text-sm text-muted"> ms</span></div>
+    </div>
+  </div>
+
+  <!-- Main Layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    
+    <!-- Event Stream -->
+    <div class="lg:col-span-2 glass-panel flex flex-col" style="height: 520px;">
+      <div class="px-4 py-3 border-b border-border flex items-center justify-between">
+        <h2 class="font-semibold text-sm">Event Stream</h2>
+        <div class="flex gap-2 text-xs">
+          <span class="px-2 py-0.5 rounded bg-accent/10 text-accent">token</span>
+          <span class="px-2 py-0.5 rounded bg-accent2/10 text-accent2">step</span>
+          <span class="px-2 py-0.5 rounded bg-warn/10 text-warn">system</span>
+          <span class="px-2 py-0.5 rounded bg-blue-500/10 text-blue-400">tool</span>
+        </div>
+      </div>
+      <div id="eventStream" class="flex-1 overflow-y-auto scrollbar-thin px-2 py-2 space-y-1 font-mono text-xs">
+        <div class="text-muted text-center py-8">Warte auf Events...</div>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="space-y-4">
+      <!-- Timing Visualization -->
+      <div class="glass-panel p-4">
+        <h3 class="font-semibold text-sm mb-3">Timing (letzte Events)</h3>
+        <div id="timingChart" class="space-y-2 font-mono text-xs">
+          <div class="text-muted text-center py-3">Keine Daten</div>
+        </div>
+      </div>
+
+      <!-- Type Distribution -->
+      <div class="glass-panel p-4">
+        <h3 class="font-semibold text-sm mb-3">Verteilung</h3>
+        <div id="typeChart" class="space-y-2">
+          <div class="text-muted text-center py-3 text-xs">Warte auf Daten...</div>
+        </div>
+      </div>
+
+      <!-- Token Counter -->
+      <div class="glass-panel p-4">
+        <h3 class="font-semibold text-sm mb-2">Tokenfluss</h3>
+        <div class="flex items-end gap-2">
+          <span id="tokenCount" class="text-3xl font-bold font-mono text-accent">0</span>
+          <span class="text-muted text-sm mb-1">Tokens total</span>
+        </div>
+        <div class="mt-2 h-1.5 bg-border rounded-full overflow-hidden">
+          <div id="tokenBar" class="h-full bg-gradient-to-r from-accent to-accent2 rounded-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WS_URL = "ws://127.0.0.1:8000/ws";
+const ws = new WebSocket(WS_URL);
+let totalTokens = 0;
+let eventTimes: number[] = [];
+
+ws.onopen = () => {
+  const badge = document.getElementById("statusBadge");
+  badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-accent live-indicator"></span><span class="text-accent">Live</span>';
+};
+
+ws.onmessage = (ev) => {
+  try {
+    const data = JSON.parse(ev.data);
+    if (data.type === "pong") return;
+    if (data.type === "welcome") {
+      document.getElementById("eventStream").innerHTML = "";
+      return;
+    }
+    addEvent(data);
+  } catch (e) {}
+};
+
+ws.onclose = () => {
+  const badge = document.getElementById("statusBadge");
+  badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-error"></span><span class="text-error">Offline</span>';
+  setTimeout(reconnect, 2000);
+};
+
+ws.onerror = () => ws.close();
+
+function reconnect() {
+  location.reload();
+}
+
+const TYPE_ICONS = {
+  token: "⟨t⟩",
+  step: "⟨s⟩",
+  system: "⟨!⟩",
+  error: "⟨✕⟩",
+  tool: "⟨⚙⟩"
+};
+
+function addEvent(ev) {
+  const stream = document.getElementById("eventStream");
+  
+  // Remove placeholder
+  if (stream.querySelector('.text-center')) stream.innerHTML = "";
+  
+  const row = document.createElement("div");
+  row.className = `event-row type-${ev.type} px-3 py-2 rounded-r-md`;
+  
+  const time = new Date(ev.ts * 1000).toLocaleTimeString("de", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const icon = TYPE_ICONS[ev.type] || "⟨?⟩";
+  const msg = ev.msg || ev.type;
+  
+  row.innerHTML = `
+    <div class="flex items-start gap-2">
+      <span class="text-muted shrink-0">${time}</span>
+      <span class="text-accent/70 shrink-0">${icon}</span>
+      <span class="break-all leading-relaxed">${escapeHtml(msg)}</span>
+    </div>
+  `;
+  
+  stream.appendChild(row);
+  while (stream.children.length > 200) stream.removeChild(stream.firstChild);
+  stream.scrollTop = stream.scrollHeight;
+  
+  updateStats(ev);
+}
+
+function escapeHtml(s) {
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function updateStats(ev) {
+  const now = time.time ? time.time() : Date.now() / 1000;
+  eventTimes.push(now);
+  while (eventTimes.length && eventTimes[0] < now - 60) eventTimes.shift();
+  
+  if (ev.type === "token") {
+    const n = parseInt(ev.count || ev.msg?.match(/\d+/)?.[0] || 0);
+    totalTokens += (isNaN(n) ? 1 : n);
+    document.getElementById("tokenCount").textContent = totalTokens.toLocaleString();
+    document.getElementById("tokenBar").style.width = Math.min(totalTokens / 50, 100) + "%";
+  }
+  
+  fetch("/api/stats").then(r => r.json()).then(s => {
+    document.getElementById("statTotal").textContent = s.total;
+    document.getElementById("statRate").innerHTML = `${s.rate_per_min}<span class="text-sm text-muted">/min</span>`;
+    document.getElementById("statTools").textContent = (s.by_type?.tool || 0);
+    
+    // Type distribution
+    const tc = document.getElementById("typeChart");
+    const colors = { token: "bg-accent", step: "bg-accent2", system: "bg-warn", error: "bg-error", tool: "bg-blue-500" };
+    const labels = { token: "Tokens", step: "Schritte", system: "System", error: "Fehler", tool: "Tools" };
+    let html = "";
+    for (const [type, count] of Object.entries(s.by_type || {})) {
+      const pct = s.total ? Math.round(count / s.total * 100) : 0;
+      html += `
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted w-20 truncate">${labels[type] || type}</span>
+          <div class="flex-1 h-2 bg-border rounded-full overflow-hidden">
+            <div class="${colors[type] || 'bg-muted'} h-full rounded-full" style="width:${pct}%"></div>
+          </div>
+          <span class="text-xs font-mono w-8 text-right">${count}</span>
+        </div>
+      `;
+    }
+    tc.innerHTML = html || '<div class="text-muted text-center py-3 text-xs">Keine Daten...</div>';
+  });
+}
+
+function clearLogs() {
+  fetch("/api/events", { method: "DELETE" }).catch(() => {});
+  document.getElementById("eventStream").innerHTML = '<div class="text-muted text-center py-8">Gelöscht...</div>';
+}
+
+// Auto-refresh stats every 2s
+setInterval(() => {
+  if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ action: "ping" }));
+}, 5000);
+
+setTimeout(() => fetch("/api/stats").then(r => r.json()).then(s => {
+  document.getElementById("statTotal").textContent = s.total;
+  document.getElementById("statRate").innerHTML = `${s.rate_per_min}<span class="text-sm text-muted">/min</span>`;
+}), 1000);
+</script>
+</body>
+</html>
