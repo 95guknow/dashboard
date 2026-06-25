@@ -28,6 +28,25 @@ class EventIn(BaseModel):
     msg: str = ""
     count: int | None = None
 
+class WalletUpdate(BaseModel):
+    amount: float = 0
+
+WALLET_FILE = BASE / "static" / "wallet.json"
+WALLET_CAP = 10000
+
+def load_wallet() -> dict:
+    if WALLET_FILE.exists():
+        try:
+            return json.loads(WALLET_FILE.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"balance": 0.0, "cap": WALLET_CAP}
+
+def save_wallet(data: dict) -> None:
+    WALLET_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+wallet = load_wallet()
+
 def emit(event: dict):
     event["ts"] = time.time()
     event["id"] = str(uuid.uuid4())[:8]
@@ -71,6 +90,17 @@ async def get_stats():
     cutoff = time.time() - 60
     recent = sum(1 for e in events if e["ts"] > cutoff)
     return {"total": len(events), "by_type": by_type, "rate_per_min": recent}
+
+@app.get("/api/wallet")
+async def get_wallet():
+    return wallet
+
+@app.post("/api/wallet")
+async def update_wallet(payload: WalletUpdate):
+    global wallet
+    wallet["balance"] = max(0.0, wallet.get("balance", 0.0) + payload.amount)
+    save_wallet(wallet)
+    return wallet
 
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):

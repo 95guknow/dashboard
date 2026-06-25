@@ -113,7 +113,7 @@ tailwind.config = {
   </header>
 
   <!-- Stats Grid -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+  <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
     <div class="glass-panel p-4">
       <div class="text-muted text-xs font-medium uppercase tracking-wider">Events</div>
       <div id="statTotal" class="text-2xl font-bold mt-1 font-mono">0</div>
@@ -129,6 +129,16 @@ tailwind.config = {
     <div class="glass-panel p-4">
       <div class="text-muted text-xs font-medium uppercase tracking-wider">Avg Time</div>
       <div id="statAvg" class="text-2xl font-bold mt-1 font-mono"><span class="text-warn">0</span><span class="text-sm text-muted"> ms</span></div>
+    </div>
+    <div class="glass-panel p-4">
+      <div class="text-muted text-xs font-medium uppercase tracking-wider">Wallet</div>
+      <div class="flex items-baseline gap-2 mt-1">
+        <span id="walletBalance" class="text-2xl font-bold font-mono text-accent">0,00</span>
+        <span class="text-sm text-muted">€</span>
+      </div>
+      <div class="mt-2 h-2 bg-border rounded-full overflow-hidden">
+        <div id="walletBar" class="h-full bg-gradient-to-r from-accent to-accent2 rounded-full transition-all duration-500" style="width: 0%"></div>
+      </div>
     </div>
   </div>
 
@@ -302,6 +312,18 @@ function updateStats(ev) {
 function clearLogs() {
   fetch("/api/events", { method: "DELETE" }).catch(() => {});
   document.getElementById("eventStream").innerHTML = '<div class="text-muted text-center py-8">Gelöscht...</div>';
+}
+
+setInterval(updateWallet, 3000);
+
+function updateWallet() {
+  fetch("/api/wallet").then(r => r.json()).then(w => {
+    const b = parseFloat(w.balance || 0);
+    const cap = parseFloat(w.cap || 10000);
+    const pct = Math.min((b / cap) * 100, 100);
+    document.getElementById("walletBalance").textContent = b.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    document.getElementById("walletBar").style.width = pct + "%";
+  }).catch(() => {});
 }
 
 // Auto-refresh stats every 2s
