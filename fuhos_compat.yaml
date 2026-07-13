@@ -1,0 +1,4 @@
+# Plattform-Kompatibilität mit Fusion Hero OS (95guknow/fusion-hero-os).
+# Quelle der Wahrheit für die Plattform-Version sind die Release-Tags vX.Y.Z
+# auf main dort — Schema siehe BRANCH_STRATEGY.md -> Versionierung.
+fuhos_compat: ">=8.3 <9"
